@@ -90,11 +90,55 @@ The examples are deliberately **adapted excerpts**, not copies of private produc
 
 Credits are not stored as a single mutable integer.
 
-The production design uses an **append-only ledger**. A typical history can look like: purchase +10, reserve -1, reserve -1, cancel +1, expiry -8, resulting in a balance of +1.
+The production design uses an **append-only ledger**. Purchase lots are identified by their `order_id` and carry their own expiration date. Later ledger entries such as reservations, cancellation refunds and expiry entries remain associated with that same lot.
 
-This provides an auditable history and makes operations such as refunds and duplicate webhook delivery easier to reason about.
+For example, a 10-credit purchase could produce:
 
-Purchase lots also carry expiry information. Reservation consumption uses the soonest-expiring eligible lot first, while universal/admin-granted credits can be kept separate from expiring purchase lots.
+```text
+purchase  +10
+reserve    -1
+reserve    -1
+cancel     +1
+```
+
+At this point the lot still contains **9 available credits**.
+
+If the lot then expires with those 9 credits still unused, the expiry sweep records:
+
+```text
+expiry     -9
+```
+
+The lot therefore nets to zero:
+
+```text
++10 -1 -1 +1 -9 = 0
+```
+
+### Cancellation refunds keep the original expiry
+
+A cancellation refund does **not** create a new credit with a new expiration date. The refund is attached to the **same purchase lot from which the reservation originally consumed the credit**.
+
+That means:
+
+```text
+Purchase lot: 10 credits, expires Oct 31
+
+purchase  +10
+reserve    -1
+cancel     +1   <- returned to the same lot
+
+Oct 31:
+expiry    -10
+```
+
+The returned credit expires together with the original purchase lot. This prevents a cancellation shortly before expiry from unintentionally extending the lifetime of a purchased credit.
+
+The available-balance calculation already excludes expired lots, even if the periodic expiry sweep has not yet run. The sweep therefore serves as an **audit/history materialization**, rather than being required for balance correctness.
+
+Consumption also uses the **soonest-expiring eligible lot first**, while universal/admin-granted credits are kept separate from expiring purchase lots.
+
+This model provides an auditable history while making refunds, expiry and duplicate webhook delivery easier to reason about.
 
 ## Payment reliability
 
