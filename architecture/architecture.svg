@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560">
+<rect width="1100" height="560" fill="white"/>
+<text x="550" y="42" text-anchor="middle" font-family="Arial" font-size="26" font-weight="bold">lainePilates — Production Architecture</text>
+<g font-family="Arial" font-size="18" text-anchor="middle">
+<rect x="70" y="110" width="240" height="90" rx="12" fill="#f2f2f2" stroke="#333"/>
+<text x="190" y="150">React + TypeScript</text><text x="190" y="178">Vite / Tailwind</text>
+<rect x="430" y="110" width="240" height="90" rx="12" fill="#f2f2f2" stroke="#333"/>
+<text x="550" y="150">FastAPI</text><text x="550" y="178">Services / Auth / API</text>
+<rect x="790" y="110" width="240" height="90" rx="12" fill="#f2f2f2" stroke="#333"/>
+<text x="910" y="150">Stripe</text><text x="910" y="178">Checkout / Webhooks</text>
+<rect x="310" y="340" width="240" height="90" rx="12" fill="#f2f2f2" stroke="#333"/>
+<text x="430" y="380">PostgreSQL</text><text x="430" y="408">Transactions / Ledger</text>
+<rect x="650" y="340" width="240" height="90" rx="12" fill="#f2f2f2" stroke="#333"/>
+<text x="770" y="380">Redis</text><text x="770" y="408">Rate limits / Broker</text>
+<rect x="650" y="475" width="240" height="55" rx="12" fill="#f2f2f2" stroke="#333"/>
+<text x="770" y="510">Celery Workers</text>
+<path d="M310 155 H430" stroke="#333" stroke-width="3" marker-end="url(#a)"/>
+<path d="M670 155 H790" stroke="#333" stroke-width="3" marker-end="url(#a)"/>
+<path d="M550 200 V340 H550" stroke="#333" stroke-width="3" marker-end="url(#a)"/>
+<path d="M610 200 V385 H650" stroke="#333" stroke-width="3" marker-end="url(#a)"/>
+<path d="M770 430 V475" stroke="#333" stroke-width="3" marker-end="url(#a)"/>
+<path d="M890 430 V475" stroke="#333" stroke-width="3" marker-end="url(#a)"/>
+</g>
+<defs><marker id="a" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#333"/></marker></defs>
+</svg>
