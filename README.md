@@ -86,59 +86,27 @@ The examples are deliberately **adapted excerpts**, not copies of private produc
 - [Async Celery task](examples/async/celery_task.py)
 - [Business-rule tests](examples/testing/reservation_rules_test.py)
 
-## Why the credit ledger matters
+## Credit ledger
 
-Credits are not stored as a single mutable integer.
+Credits are managed with an **append-only ledger** instead of a mutable balance.
 
-The production design uses an **append-only ledger**. Purchase lots are identified by their `order_id` and carry their own expiration date. Later ledger entries such as reservations, cancellation refunds and expiry entries remain associated with that same lot.
+Each purchase has its own credit lot and expiration date. Reservations consume credits from that lot, and cancellations return the credit to the **same lot**, so the original expiration is preserved.
 
-For example, a 10-credit purchase could produce:
+For example:
 
 ```text
+Purchase: 10 credits, expires Oct 31
+
 purchase  +10
-reserve    -1
 reserve    -1
 cancel     +1
 ```
 
-At this point the lot still contains **9 available credits**.
+The cancelled credit is available again, but it still expires on Oct 31. This prevents cancellations from unintentionally extending the lifetime of purchased credits.
 
-If the lot then expires with those 9 credits still unused, the expiry sweep records:
+Credits are consumed from the lots that expire first, and expired credits are excluded from the available balance.
 
-```text
-expiry     -9
-```
-
-The lot therefore nets to zero:
-
-```text
-+10 -1 -1 +1 -9 = 0
-```
-
-### Cancellation refunds keep the original expiry
-
-A cancellation refund does **not** create a new credit with a new expiration date. The refund is attached to the **same purchase lot from which the reservation originally consumed the credit**.
-
-That means:
-
-```text
-Purchase lot: 10 credits, expires Oct 31
-
-purchase  +10
-reserve    -1
-cancel     +1   <- returned to the same lot
-
-Oct 31:
-expiry    -10
-```
-
-The returned credit expires together with the original purchase lot. This prevents a cancellation shortly before expiry from unintentionally extending the lifetime of a purchased credit.
-
-The available-balance calculation already excludes expired lots, even if the periodic expiry sweep has not yet run. The sweep therefore serves as an **audit/history materialization**, rather than being required for balance correctness.
-
-Consumption also uses the **soonest-expiring eligible lot first**, while universal/admin-granted credits are kept separate from expiring purchase lots.
-
-This model provides an auditable history while making refunds, expiry and duplicate webhook delivery easier to reason about.
+The ledger provides a simple, auditable history of purchases, usage, refunds and expiry.
 
 ## Payment reliability
 
