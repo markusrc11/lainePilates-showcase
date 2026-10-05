@@ -1,22 +1,34 @@
 # lainePilates — Production Engineering Showcase
 
-Full-stack booking and payments platform for a real Pilates business.
+Full-stack booking and payments platform built for a real Pilates business.
 
-The production source code is kept private because the application handles real customer accounts, reservations and payment workflows. This public repository is a curated technical showcase: architecture, engineering decisions and sanitized implementation examples that are useful for technical review without exposing production data or infrastructure.
+> **Production source is private.** This public repository is a curated technical showcase of the architecture, engineering decisions and selected sanitized implementation patterns.
 
-## Stack
+The production application handles real customer accounts, reservations and payment workflows, so the complete source code, infrastructure configuration and production data are intentionally not exposed here.
 
-- Python 3.11+
-- FastAPI, SQLAlchemy 2, Alembic
-- PostgreSQL
-- React, TypeScript, Vite, Tailwind CSS
-- Redis + Celery
-- Stripe Checkout + signed webhooks
-- JWT + OAuth, role-based authorization
-- pytest, Vitest, Testing Library
-- Docker, Nginx, CI/CD
+## What this demonstrates
+
+This project is more than a CRUD booking application. The interesting engineering work is around **business invariants, concurrency, financial state, idempotency, authentication and failure handling**.
+
+| Area | Design |
+|---|---|
+| Booking concurrency | PostgreSQL pessimistic row locking |
+| Credit balance | Append-only ledger rather than mutable balance |
+| Credit consumption | FIFO by expiry + typed credit pools |
+| Payment webhooks | Signature verification + event deduplication |
+| Payment idempotency | Provider event IDs + DB uniqueness |
+| Transaction failures | Savepoints + retryable 5xx responses |
+| Authentication | JWT + OAuth |
+| Session revocation | Per-token JTI denylist + global token version |
+| Authorization | Client / Instructor / Admin RBAC + ownership checks |
+| Abuse protection | Redis-backed rate limiting |
+| Background work | Redis + Celery |
+| Testing | pytest + Vitest / Testing Library |
+| Delivery | Docker + Nginx + CI/CD |
 
 ## Architecture
+
+![Architecture](architecture/architecture.svg)
 
 ```text
 React + TypeScript
@@ -41,27 +53,102 @@ ledger                  token revocation
 FastAPI <---- signed webhooks ----> Stripe
 ```
 
-## Engineering highlights
+## Stack
 
-- **Booking concurrency:** PostgreSQL row locking (`SELECT ... FOR UPDATE`) protects class capacity from race conditions and double booking.
-- **Credits and transactions:** user credit consumption is protected by database locking and transactional updates.
-- **Payments:** Stripe webhook signatures are verified from the raw request body; provider event IDs and database constraints provide idempotency.
-- **Failure handling:** payment processing uses savepoints and returns retryable failures appropriately so the provider can retry transient webhook failures.
-- **Provider abstraction:** payment logic is isolated behind a provider interface, allowing a Stripe implementation and a bypass/test implementation.
-- **Async processing:** Redis and Celery handle email notifications and scheduled/background work outside the request path.
-- **Authentication:** JWT access/refresh tokens support per-session revocation and global token-version invalidation.
-- **Authorization:** Admin, Instructor and Client roles are enforced through centralized dependencies plus ownership checks.
-- **Rate limiting:** sensitive authentication, reservation and payment endpoints are rate limited.
-- **Testing:** backend and frontend tests cover booking rules, payments, authentication and UI behavior; CI enforces a minimum 70% backend coverage threshold.
+- **Backend:** Python 3.11+, FastAPI, SQLAlchemy 2, Alembic
+- **Database:** PostgreSQL
+- **Frontend:** React, TypeScript, Vite, Tailwind CSS
+- **Async / coordination:** Redis, Celery
+- **Payments:** Stripe Checkout + signed webhooks
+- **Authentication:** JWT + OAuth
+- **Testing:** pytest, Vitest, Testing Library
+- **Infrastructure:** Docker, Nginx, CI/CD
 
-## Public examples
+## Engineering deep dives
 
-The `examples/` directory contains adapted excerpts rather than copies of private production files. The examples focus on the engineering invariants that are most relevant during a technical review.
+- [Architecture](docs/architecture.md) — application layers, dependencies and deployment shape
+- [Booking concurrency](docs/booking-concurrency.md) — preventing overbooking under concurrent requests
+- [Payments](docs/payments.md) — Stripe webhook verification, idempotency and failure handling
+- [Authentication](docs/authentication.md) — JWT revocation, RBAC and rate limiting
+- [Testing](docs/testing.md) — business-focused automated testing strategy
+- [Async processing](docs/async-processing.md) — Celery jobs and post-transaction notifications
 
-## Security / privacy
+## Selected implementation examples
 
-This repository intentionally contains no production database, customer information, payment identifiers, OAuth identifiers, credentials, API keys, `.env` files, logs containing personal data, or production exports.
+The examples are deliberately **adapted excerpts**, not copies of private production files.
+
+- [Reservation locking](examples/booking/reservation_service.py)
+- [Payment provider abstraction](examples/payments/provider_abstraction.py)
+- [Webhook processing](examples/payments/webhook_handler.py)
+- [Credit ledger](examples/credits/credit_ledger.py)
+- [JWT session revocation](examples/auth/token_revocation.py)
+- [Rate limiting](examples/security/rate_limit.py)
+- [Async Celery task](examples/async/celery_task.py)
+- [Business-rule tests](examples/testing/reservation_rules_test.py)
+
+## Why the credit ledger matters
+
+Credits are not stored as a single mutable integer.
+
+The production design uses an **append-only ledger**. A typical history can look like: purchase +10, reserve -1, reserve -1, cancel +1, expiry -8, resulting in a balance of +1.
+
+This provides an auditable history and makes operations such as refunds and duplicate webhook delivery easier to reason about.
+
+Purchase lots also carry expiry information. Reservation consumption uses the soonest-expiring eligible lot first, while universal/admin-granted credits can be kept separate from expiring purchase lots.
+
+## Payment reliability
+
+A payment webhook is treated as an unreliable distributed-system boundary:
+
+1. Read the exact raw request body.
+2. Verify the provider signature.
+3. Normalize the provider event into an internal DTO.
+4. Record/deduplicate the provider event.
+5. Process the business transition inside a savepoint.
+6. Use database uniqueness as a second idempotency boundary.
+7. Return a retryable 5xx when the order is not ready or a transient failure occurs.
+8. Commit the business state.
+9. Trigger notification work only after the successful commit.
+
+This avoids treating a webhook as a simple payment callback.
+
+## Booking reliability
+
+A booking changes several pieces of state together: class capacity, reservation state and user credit ledger.
+
+The class row is locked before checking capacity. The user's row is locked before a balance-dependent credit operation. These operations are performed inside the same database transaction.
+
+The result is that two concurrent requests cannot both observe the same available seat and successfully consume it.
+
+## Security boundaries
+
+The production application includes:
+
+- JWT access/refresh authentication
+- OAuth login
+- per-session token revocation through JTI denylisting
+- global session invalidation through token versioning
+- centralized role authorization
+- resource ownership checks
+- rate limiting on sensitive endpoints
+- signed Stripe webhook verification
+- audit logging
+- no handling of raw card details
+
+## Testing philosophy
+
+Tests focus on business invariants and failure modes rather than only line coverage.
+
+Examples include booking without credits, exact credit consumption, cancellation/refund rules, forced admin refunds, preventing double charging after reactivation, FIFO credit-lot consumption, expired-credit rejection and webhook idempotency.
+
+CI enforces a minimum backend coverage threshold of **70%**.
+
+## Privacy
+
+This repository intentionally contains no production database, customer information, production payment identifiers, OAuth identifiers, credentials, API keys, environment files, sensitive logs or production exports.
+
+The public repository is therefore safe to share as a technical portfolio while the real application remains private.
 
 ---
 
-Built as a real-world production system, documented here as a recruiter-facing engineering case study.
+Built as a real-world production system and documented here as a recruiter-facing engineering case study.
