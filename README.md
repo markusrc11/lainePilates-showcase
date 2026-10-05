@@ -4,6 +4,8 @@ Full-stack booking and payments platform built for a real Pilates business.
 
 > **Production source is private.** This public repository is a curated technical showcase of the architecture, engineering decisions and selected sanitized implementation patterns.
 
+> **Project status:** The production application is currently being prepared for launch and is not publicly accessible yet. This repository is a technical showcase of the engineering decisions, architecture and implementation patterns used in the project.
+
 The production application handles real customer accounts, reservations and payment workflows, so the complete source code, infrastructure configuration and production data are intentionally not exposed here.
 
 ## What this demonstrates
